@@ -9,7 +9,7 @@ services:
       - path: .env
         required: false
     ports:
-      - "127.0.0.1:${APP_PORT:-8000}:8000"
+      - "0.0.0.0:${APP_PORT:-8000}:8000"
     volumes:
       - ./:/app
       - ./storage/videos:/app/storage/videos
@@ -59,7 +59,7 @@ services:
     environment:
       VITE_API_BASE_URL: ${BACKOFFICE_API_BASE_URL:-http://localhost:8000}
     ports:
-      - "127.0.0.1:${BACKOFFICE_PORT:-5173}:5173"
+      - "0.0.0.0:${BACKOFFICE_PORT:-5173}:5173"
     volumes:
       - ./backoffice:/app
       - backoffice_node_modules:/app/node_modules

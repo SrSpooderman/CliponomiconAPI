@@ -74,6 +74,7 @@ def get_oidc_login(
         jwt_service,
         oidc_provider,
         default_role=UserRole(settings.oidc_default_role),
+        admin_group=settings.oidc_admin_group,
     )
 
 

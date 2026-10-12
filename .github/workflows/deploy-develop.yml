@@ -1,4 +1,4 @@
-name: Deploy Luigi Portainer Develop
+name: Test and sync to GitLab (develop)
 
 on:
   push:
@@ -31,12 +31,46 @@ jobs:
       - name: Run unit and HTTP tests
         run: python -m pytest -m "unit or http"
 
-  deploy:
+  sync-gitlab:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Trigger Portainer webhook
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Create snapshot without GitHub configuration
         run: |
-          curl --fail-with-body --show-error --silent -k \
-            -X POST "${{ secrets.WEBHOOK_URL_DEVELOP }}" \
-            -H "Authorization: Bearer ${{ secrets.WEBHOOK_API_TOKEN }}"
+          mkdir "$RUNNER_TEMP/gitlab-snapshot"
+          git archive "$GITHUB_SHA" | tar -x -C "$RUNNER_TEMP/gitlab-snapshot"
+          rm -rf "$RUNNER_TEMP/gitlab-snapshot/.github"
+          cd "$RUNNER_TEMP/gitlab-snapshot"
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Sync from GitHub ${GITHUB_SHA}"
+
+      - name: Push snapshot to GitLab
+        env:
+          GITLAB_REPOSITORY_URL: ${{ secrets.GITLAB_REPOSITORY_URL }}
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          : "${GITLAB_REPOSITORY_URL:?Missing GITLAB_REPOSITORY_URL secret}"
+          : "${GITLAB_TOKEN:?Missing GITLAB_TOKEN secret}"
+          cat > "$RUNNER_TEMP/gitlab-askpass" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'oauth2' ;;
+            *Password*) printf '%s\n' "$GITLAB_TOKEN" ;;
+          esac
+          EOF
+          chmod 700 "$RUNNER_TEMP/gitlab-askpass"
+          export GIT_ASKPASS="$RUNNER_TEMP/gitlab-askpass"
+          export GIT_TERMINAL_PROMPT=0
+          cd "$RUNNER_TEMP/gitlab-snapshot"
+          git remote add gitlab "$GITLAB_REPOSITORY_URL"
+          git push --force gitlab HEAD:develop

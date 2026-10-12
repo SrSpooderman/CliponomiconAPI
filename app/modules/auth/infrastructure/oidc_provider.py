@@ -30,11 +30,16 @@ class KeycloakOidcProvider:
 
     def authenticate(self, *, code: str, redirect_uri: str) -> OidcIdentity:
         tokens = self._exchange_code(code=code, redirect_uri=redirect_uri)
-        token = tokens.get("id_token") or tokens.get("access_token")
+        id_token = tokens.get("id_token")
+        access_token = tokens.get("access_token")
+        token = id_token or access_token
         if not isinstance(token, str) or not token:
             raise OidcAuthenticationError("OIDC token response did not include a JWT")
 
-        claims = self._decode_token(token)
+        claims = self._decode_token(
+            token,
+            access_token=access_token if isinstance(id_token, str) else None,
+        )
         subject = claims.get("sub")
         if not isinstance(subject, str) or not subject:
             raise OidcAuthenticationError("OIDC token did not include a subject")
@@ -84,7 +89,12 @@ class KeycloakOidcProvider:
 
         return payload
 
-    def _decode_token(self, token: str) -> dict[str, Any]:
+    def _decode_token(
+        self,
+        token: str,
+        *,
+        access_token: str | None = None,
+    ) -> dict[str, Any]:
         try:
             header = jwt.get_unverified_header(token)
             key = self._jwks_key(header.get("kid"))
@@ -94,8 +104,14 @@ class KeycloakOidcProvider:
                 algorithms=[header.get("alg", "RS256")],
                 audience=settings.oidc_client_id,
                 issuer=_issuer_url(),
+                access_token=access_token,
             )
         except JWTError as error:
+            logger.warning(
+                "OIDC token validation failed error_type=%s reason=%s",
+                type(error).__name__,
+                str(error),
+            )
             raise OidcAuthenticationError("OIDC token validation failed") from error
 
     def _jwks_key(self, kid: str | None) -> dict[str, Any]:

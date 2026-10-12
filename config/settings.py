@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     oidc_allowed_frontend_domains: Annotated[list[str], NoDecode] = []
     oidc_frontend_callback_path: str = "/login/oidc/callback"
     oidc_default_role: str = "user"
+    oidc_admin_group: str | None = None
     super_admin_username: str | None = None
     super_admin_password: str | None = None
     steam_web_api_key: str | None = None

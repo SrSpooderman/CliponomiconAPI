@@ -43,11 +43,13 @@ class OidcLogin:
         oidc_provider: OidcProvider,
         *,
         default_role: UserRole = UserRole.USER,
+        admin_group: str | None = None,
     ) -> None:
         self.user_repository = user_repository
         self.access_token_service = access_token_service
         self.oidc_provider = oidc_provider
         self.default_role = default_role
+        self.admin_group = admin_group.strip() if admin_group and admin_group.strip() else None
 
     def authorization_url(self, *, state: str, redirect_uri: str) -> str:
         return self.oidc_provider.authorization_url(state=state, redirect_uri=redirect_uri)
@@ -98,13 +100,21 @@ class OidcLogin:
             oidc_email=identity.email,
             oidc_name=identity.name,
             oidc_groups=identity.groups,
-            role=self.default_role,
+            role=self._role_for_identity(identity),
         )
 
         try:
             return self.user_repository.create(user)
         except UserPersistenceConflictError as error:
             raise OidcAuthenticationError("OIDC user could not be created") from error
+
+    def _role_for_identity(self, identity: OidcIdentity) -> UserRole:
+        if self.admin_group is not None and any(
+            group.strip().casefold() == self.admin_group.casefold()
+            for group in identity.groups
+        ):
+            return UserRole.ADMIN
+        return self.default_role
 
     def _refresh_user_claims(self, user: User, identity: OidcIdentity) -> User:
         updated_user = self.user_repository.update(
